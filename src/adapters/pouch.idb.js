@@ -435,21 +435,20 @@ var IdbPouch = function(opts, callback) {
   // current revision(s) from the by sequence store
   api._get = function idb_get(id, opts, callback) {
 
-    var result;
+    var result = [];
     var txn = idb.transaction([DOC_STORE, BY_SEQ_STORE, ATTACH_STORE], 'readonly');
     txn.oncomplete = function() {
       // Leaves are set when we ask about open_revs
       // Using this approach they can be quite easily abstracted out to some
       // generic api.get
       if (leaves) {
-        result = [];
         var count = leaves.length;
         leaves.forEach(function(leaf){
           api.get(id.docId, {rev: leaf}, function(err, doc){
             if (!err) {
               result.push({ok: doc});
             } else {
-              result.push({missing: leaf});
+              result.push({error: true, missing: leaf});
             }
             count--;
             if(!count) {
@@ -463,10 +462,11 @@ var IdbPouch = function(opts, callback) {
     };
 
     function finish() {
-      if ('error' in result) {
-        call(callback, result);
+      var errors = result.filter(function(e) { return e.error; });
+      if (errors.length) {
+        call(callback, errors[0]);
       } else {
-        call(callback, null, result);
+        call(callback, null, result[0]);
       }
     }
 
@@ -474,7 +474,7 @@ var IdbPouch = function(opts, callback) {
     txn.objectStore(DOC_STORE).get(id.docId).onsuccess = function(e) {
       var metadata = e.target.result;
       if (!e.target.result || (isDeleted(metadata, opts.rev) && !opts.rev)) {
-        result = Pouch.Errors.MISSING_DOC;
+        result.push(Pouch.Errors.MISSING_DOC);
         return;
       }
 
@@ -496,7 +496,7 @@ var IdbPouch = function(opts, callback) {
       index.get(key).onsuccess = function(e) {
         var doc = e.target.result;
         if (!doc) {
-          result = Pouch.Errors.MISSING_DOC;
+          result.push(Pouch.Errors.MISSING_DOC);
           return;
         }
         if (opts.revs) { // FIXME: if rev is given it should return ids from root to rev (don't include newer)
@@ -529,7 +529,7 @@ var IdbPouch = function(opts, callback) {
               doc._attachments[key].data = data;
 
               if (++recv === attachments.length) {
-                result = doc;
+                result.push(doc);
               }
             });
           });
@@ -539,7 +539,7 @@ var IdbPouch = function(opts, callback) {
               doc._attachments[key].stub = true;
             }
           }
-          result = doc;
+          result.push(doc);
         }
       };
     };
