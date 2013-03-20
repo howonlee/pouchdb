@@ -62,6 +62,19 @@ adapters.map(function(adapters) {
     });
   });
 
+  asyncTest("Test basic pull replication plain api", function() {
+    var self = this;
+    initDBPair(this.name, this.remote, function(db, remote) {
+      remote.bulkDocs({docs: docs}, {}, function(err, results) {
+        Pouch.replicate(self.name, self.remote, {}, function(err, result) {
+          ok(result.ok, 'replication was ok');
+          equal(result.docs_written, docs.length, 'correct # docs written');
+          start();
+        });
+      });
+    });
+  });
+
   asyncTest("Local DB contains documents", function() {
     console.info('Starting Test: Local DB contains documents');
     var self = this;
